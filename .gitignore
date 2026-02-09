@@ -1,0 +1,108 @@
+# CMake generated files
+CMakeFiles/
+CMakeCache.txt
+cmake_install.cmake
+Makefile
+*.cmake
+!CMakeLists.txt
+
+# Compiled object files
+*.o
+*.obj
+*.ko
+*.elf
+
+# Libraries
+*.a
+*.lib
+*.so
+*.so.*
+*.dylib
+
+# Executables
+*.exe
+*.out
+*.app
+*.hex
+*.bin
+*.map
+*.srec
+*.s19
+
+# Debug files
+*.dSYM/
+*.su
+*.idb
+*.pdb
+*.d
+
+# Doxygen generated documentation
+docs/html/
+docs/latex/
+docs/xml/
+docs/man/
+
+# IDE and editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.project
+.cproject
+.settings/
+*.code-workspace
+
+# Eclipse CDT
+.metadata/
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+.Python
+*.egg-info/
+.eggs/
+venv/
+.env
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+# Embedded platform specific
+# ESP-IDF
+sdkconfig
+sdkconfig.old
+dependencies.lock
+
+# PlatformIO
+.pio/
+.pioenvs/
+.piolibdeps/
+
+# STM32CubeIDE
+Debug/
+Release/
+
+# Segger
+*.jflash
+
+# Test outputs
+Testing/
+test-results/
+*.gcov
+*.gcda
+*.gcno
+coverage/
+
+# User-specific configuration (keep templates)
+ds_app_config.h
+ds_app_register_names.h
+ds_app_parameter_names.h
