@@ -3,7 +3,7 @@
  *
  * Created: 3/16/2021 1:51:55 PM
  *  Author: Sofian
- */ 
+ */
 
 #include "dsRegisters.h"
 
@@ -17,8 +17,43 @@
 #include "dsParameters.h"
 #include "datastream.h"
 
-// Registers to be used by the system
+// Library-owned system registers
+ds_system_registers_t SYS_REGS;
+
+// User-defined registers
 ds_registers_t REGS;
+
+/* ======================== System Register Access ======================== */
+
+uint32_t dsGetSystemRegister(uint32_t address, reply_t *reply)
+{
+    if (address < DS_SYSTEM_REGISTER_COUNT)
+    {
+        if (reply != NULL)
+        {
+            *reply = READ_REGISTER_OK;
+        }
+        return SYS_REGS.byAddress[address];
+    }
+    else
+    {
+        if (reply != NULL)
+        {
+            *reply = ADDRESS_OUT_OF_RANGE_ERROR;
+        }
+        return 0;
+    }
+}
+
+void dsSetSystemRegister(uint32_t address, uint32_t value, reply_t *reply)
+{
+    (void)address;
+    (void)value;
+    // All system registers are read-only from the external protocol.
+    *reply = PERMISSION_ERROR;
+}
+
+/* ======================== User Register Access ======================== */
 
 void dsSetRegister(uint32_t address, uint32_t value, reply_t * reply)
 {
@@ -26,16 +61,16 @@ void dsSetRegister(uint32_t address, uint32_t value, reply_t * reply)
     {
         if (address < DS_REGISTER_COUNT)
         {
-            if (address >= DS_REGISTERS_READ_ONLY_COUNT)    
+            if (address >= DS_REGISTERS_READ_ONLY_COUNT)
             {
                 uint32_t oldValue = REGS.byAddress[address]; // Store the old value before changing
-                
+
                 REGS.byAddress[address] = value; // update the register in the union
-                
+
                 dsRegisterSetCallback(address, oldValue, value);
-                
+
                 *reply = WRITE_REGISTER_OK;
-                
+
                 // Log the register write operation
                 DS_LOGI("Register at address %" PRIu32 " set to value %" PRIu32, address, value);
             }
@@ -78,15 +113,32 @@ uint32_t dsGetRegister(uint32_t address, reply_t * reply)
 }
 
 /**
- * @brief Initializes the register values for the system.
+ * @brief Initializes the system register values.
  *
- * This function sets the initial values for key registers, such as
- * FIRMWARE_VERSION and CONTROL_INTERFACE, to their default or configured states.
- * It should be called during system startup to ensure registers are properly initialized.
+ * Sets the initial values for all library-owned system registers.
+ * Called during dsInitialize(). Override this weak function if you need
+ * to observe or react to system register initialization, but take care
+ * not to break library-required defaults.
+ *
+ * @param[in,out] sysRegList Pointer to the system register structure to initialize
+ */
+WEAK void dsInitializeSystemRegisters(ds_system_registers_t *sysRegList)
+{
+    sysRegList->byName.CONTROL_INTERFACE = ds_control_UNDECIDED;
+}
+
+/**
+ * @brief Initializes the user register values.
+ *
+ * Called during dsInitialize(). Override this weak function in your application
+ * to set initial values for your own registers via the regList parameter.
+ *
+ * @param[in,out] regList Pointer to the user register structure to initialize
  */
 WEAK void dsInitializeRegisters(ds_registers_t * regList)
 {
-    regList->byName.CONTROL_INTERFACE = ds_control_UNDECIDED;
+    (void)regList;
+    // Default: do nothing — user registers start at zero
 }
 
 // Weak functions to allow for custom register handling

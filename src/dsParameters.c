@@ -122,30 +122,11 @@ WEAK void dsSetParametersDefaults(ds_parameters_t * parList)
     // set all parameters to zero
     *parList = (const ds_parameters_t){ 0 };
 
-    // set sensible defaults
-    parList->byName.USES_DHCP                          = 1;
-
-    parList->byName.IP_ADDR[0]                         = configIP_ADDR0;
-    parList->byName.IP_ADDR[1]                         = configIP_ADDR1;
-    parList->byName.IP_ADDR[2]                         = configIP_ADDR2;
-    parList->byName.IP_ADDR[3]                         = configIP_ADDR3;
-
-    parList->byName.NET_MASK[0]                        = configNET_MASK0;
-    parList->byName.NET_MASK[1]                        = configNET_MASK1;
-    parList->byName.NET_MASK[2]                        = configNET_MASK2;
-    parList->byName.NET_MASK[3]                        = configNET_MASK3;
-
-    // generate a random sequence for the MAC address
-    parList->byName.MAC_ADDR[0]                        = 0x62;
-    // do not remove the following lines, they make sure the MAC address is valid
-    parList->byName.MAC_ADDR[0]                        = parList->byName.MAC_ADDR[0] & 0xFE; // unicast device bit0 = (0 unicast, 1 multicacst)
-    parList->byName.MAC_ADDR[0]                        = parList->byName.MAC_ADDR[0] | 0x02; // Locally adminstred MAC (not globally unique) bit1 = (0 globally unique, 1 locally adminstered)
-    parList->byName.MAC_ADDR[1]                        = uxRand() & 0xFF;
-    parList->byName.MAC_ADDR[2]                        = uxRand() & 0xFF;
-    parList->byName.MAC_ADDR[3]                        = uxRand() & 0xFF;
-    parList->byName.MAC_ADDR[4]                        = uxRand() & 0xFF;
-    parList->byName.MAC_ADDR[5]                        = uxRand() & 0xFF;
-    // dsWriteParametersToFlash(parList);
+    // Set sensible defaults for your application parameters here, for example:
+    // parList->byName.DEVICE_ID    = 1;
+    // parList->byName.USES_DHCP    = 1;
+ 
+    dsWriteParametersToFlash(parList);
 }
 
 /* Callback for when a parameter is set */

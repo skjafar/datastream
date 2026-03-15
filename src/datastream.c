@@ -138,6 +138,7 @@ void dsInitialize(void)
     initialized = true;
     
     dsInitializeParameters(&PARS);
+    dsInitializeSystemRegisters(&SYS_REGS);
     dsInitializeRegisters(&REGS);
     // Initialize the task registration system
     dsClearRegisteredTasks();
@@ -170,9 +171,9 @@ void dsProcessPacket(dsRxPacket *inPacket, dsTxPacket *outPacket)
     }
     #endif
     
-    // Increment the packet count register
+    // Increment the packet count system register
     #if(DS_STATS_ENABLE == 1)
-        REGS.byName.DS_PACKET_COUNT++;
+        SYS_REGS.byName.DS_PACKET_COUNT++;
     #endif
 
     switch (inPacket->contents.type)
@@ -207,6 +208,16 @@ void dsProcessPacket(dsRxPacket *inPacket, dsTxPacket *outPacket)
             } else {
                 outPacket->contents.status = CONTROL_INTERFACE_ERROR.val;
             }
+            break;
+        case ds_type_READ_SYSTEM_REGISTER:
+            outPacket->contents.value = dsGetSystemRegister(inPacket->contents.address, &reply);
+            outPacket->contents.status = reply.val;
+            break;
+        case ds_type_WRITE_SYSTEM_REGISTER:
+            dsSetSystemRegister(inPacket->contents.address, inPacket->contents.value, &reply);
+            outPacket->contents.status = reply.val;
+            outPacket->contents.value = (reply.val == WRITE_REGISTER_OK_REPLY_VAL)
+                ? inPacket->contents.value : 0;
             break;
         default:
             // If the user-defined type was not processed, we assume it's an unknown type error
@@ -344,14 +355,14 @@ bool dsProcessControlInterfaceCommand(void)
     ds_control_interface_t controlType = dsGetTaskControlType(controllingTask);
     if (controlType != ds_control_UNDECIDED)
     {
-        REGS.byName.CONTROL_INTERFACE = controlType;
+        SYS_REGS.byName.CONTROL_INTERFACE = controlType;
         DS_LOGI("Control interface set to %d for registered task 0x%08" PRIx32, controlType, (uint32_t)controllingTask);
         result = true;
     }
     else
     {
         // If no registered task found, set to undecided
-        REGS.byName.CONTROL_INTERFACE = ds_control_UNDECIDED;
+        SYS_REGS.byName.CONTROL_INTERFACE = ds_control_UNDECIDED;
         DS_LOGE("Control interface request from unregistered task 0x%08" PRIx32, (uint32_t)controllingTask);
     }
 
@@ -418,7 +429,7 @@ WEAK void dsErrorCallback(reply_t reply, dsRxPacket *inPacket, dsTxPacket *outPa
 {
     // This function is weak and can be overridden by the application
     
-    REGS.byName.DS_ERROR_COUNT++; // Increment the error count register
+    SYS_REGS.byName.DS_ERROR_COUNT++; // Increment the error count system register
 }
 
 /* ======================== Board Name API ======================== */

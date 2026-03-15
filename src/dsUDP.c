@@ -222,7 +222,7 @@ void prvdsUDPTask(void *pvParameters)
                 clientIP = client.sin_address.ulIP_IPv4;
                 #endif
                 
-                if (dsProcessDiscoveryPacket(rxPacket.buffer, lBytes, discoveryBuffer, &discoveryTxSize, clientIP))
+                if (dsProcessDiscoveryPacket(rxPacket.buffer, (size_t)lBytes, discoveryBuffer, &discoveryTxSize, clientIP))
                 {
                     // This was a discovery packet, send discovery response
                     #if (DS_PLATFORM == ESP32)
@@ -252,7 +252,7 @@ void prvdsUDPTask(void *pvParameters)
             else if (lBytes > 0)
             {
                 // Invalid packet size for datastream, send error response
-                dsPacketSizeError(lBytes, &txPacket);
+                dsPacketSizeError((uint32_t)lBytes, &txPacket);
                 lSent = dsUDPSendTo(listeningSocket, txPacket.buffer, DATASTREAM_OUTPUT_SIZE, 0, &client, xSize);
             }
             else if (lBytes < 0) 

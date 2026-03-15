@@ -19,6 +19,10 @@
  * @{
  */
 
+// SPDX-License-Identifier: LicenseRef-PolyForm-Noncommercial-1.0.0
+// Copyright (c) 2026 Sofian Jafar
+// Free for personal/hobby/non-profit use. Commercial use requires a license — see COMMERCIAL.md.
+
 #ifndef DATASTREAM_H_
 #define DATASTREAM_H_
 
@@ -168,18 +172,16 @@ enum ds_reply_values
 #define CRC_ERROR_REPLY_STRING                  "CRC Error\r\n"
 
 // Core system commands processed by dsProcessSysCommand
-// Users can extend this enum by defining additional values starting from ds_sys_command_USER_DEFINED_START
+// User-defined commands occupy 0–199; library commands are at 200–202.
+// Users can define their own commands as a plain zero-based enum with no offset needed.
 typedef enum
 {
-    // Core system commands (0-99 reserved)
-    ds_sys_command_READ_FLASH          = 0,    // Read parameters from flash
-    ds_sys_command_WRITE_FLASH         = 1,    // Write parameters to flash
-    ds_sys_command_RESET_FIRMWARE      = 2,    // Reset the firmware
-    
-    // User-defined system commands should start from this value
-    ds_sys_command_USER_DEFINED_START      = 100,
-    
-    ds_sys_command_DUMMY                   = 0xFFFFFFFF    // Ensure enum is 32-bit
+    // Library system commands (200-255 reserved for library use)
+    ds_sys_command_READ_FLASH          = 200,  // Read parameters from flash
+    ds_sys_command_WRITE_FLASH         = 201,  // Write parameters to flash
+    ds_sys_command_RESET_FIRMWARE      = 202,  // Reset the firmware
+
+    ds_sys_command_DUMMY               = 0xFFFFFFFF    // Ensure enum is 32-bit
 }ds_sys_command_t;
 
 // A union to hold the datastream output packet, can be acessed as a buffer or as a structure
@@ -220,20 +222,22 @@ typedef struct
 }reply_t;
 
 // Core input types for the datastream protocol
-// Users can extend this enum by defining additional types starting from ds_USER_DEFINED_START
+// Users can extend this enum by defining additional types starting from ds_type_USER_DEFINED_START
 typedef enum
 {
-    // Core datastream input types (0-99 reserved)
-    ds_type_SYS_COMMAND         = 0,    // Send system commands to the system
-    ds_type_READ_REGISTER       = 1,    // Read a register from the system
-    ds_type_WRITE_REGISTER      = 2,    // Write a register to the system
-    ds_type_READ_PARAMETER      = 3,    // Read a parameter from the system
-    ds_type_WRITE_PARAMETER     = 4,    // Write a parameter to the system
-    ds_type_CONTROL_INTERFACE   = 5,    // Set the controlling task for the system
+    // Core datastream input types (0-99 reserved for library use)
+    ds_type_SYS_COMMAND              = 0,    // Send system commands to the system
+    ds_type_READ_REGISTER            = 1,    // Read a user register from the system
+    ds_type_WRITE_REGISTER           = 2,    // Write a user register to the system
+    ds_type_READ_PARAMETER           = 3,    // Read a parameter from the system
+    ds_type_WRITE_PARAMETER          = 4,    // Write a parameter to the system
+    ds_type_CONTROL_INTERFACE        = 5,    // Set the controlling task for the system
+    ds_type_READ_SYSTEM_REGISTER     = 6,    // Read a system register from the library
+    ds_type_WRITE_SYSTEM_REGISTER    = 7,    // Write a system register (currently all read-only)
 
     // User-defined input types should start from this value
     ds_type_USER_DEFINED_START  = 100,
-    
+
     ds_type_DUMMY               = 0xFFFFFFFF    // Ensure enum is 32-bit
 } ds_type_t;
 
@@ -339,7 +343,7 @@ bool dsCheckTaskWritePermission(void);
  * - READ_FLASH: Load parameters from flash
  * - WRITE_FLASH: Save parameters to flash
  * - RESET_FIRMWARE: Trigger system reset
- * - User-defined commands (>= ds_sys_command_USER_DEFINED_START)
+ * - User-defined commands (0–199, routed to dsProcessUserSysCommand)
  *
  * @param[in]  inputPacket  Pointer to command packet
  * @param[out] outputPacket Pointer to response packet
@@ -350,7 +354,7 @@ bool dsProcessSysCommand(const dsRxPacket *inputPacket, dsTxPacket *outputPacket
 /**
  * @brief Process user-defined system commands (weak function)
  *
- * Override to handle custom system commands (>= ds_sys_command_USER_DEFINED_START).
+ * Override to handle custom system commands (any command value not matching 200–202).
  *
  * @param[in]  inputPacket  Pointer to command packet
  * @param[out] outputPacket Pointer to response packet
