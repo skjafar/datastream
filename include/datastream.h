@@ -126,15 +126,15 @@
 
 /* Dimensions the buffers into which input and output packets are placed. [bytes] */
 #if(CRC8_ENABLE)
-    #define DATASTREAM_INPUT_SIZE	7U
-    #define DATASTREAM_OUTPUT_SIZE	7U
+    #define DATASTREAM_INPUT_SIZE	9U
+    #define DATASTREAM_OUTPUT_SIZE	9U
 #else
-    #define DATASTREAM_INPUT_SIZE	6U
-    #define DATASTREAM_OUTPUT_SIZE	6U
+    #define DATASTREAM_INPUT_SIZE	8U
+    #define DATASTREAM_OUTPUT_SIZE	8U
 #endif
 
 // All possible reply values for the datastream protocol, add new values as needed
-enum ds_reply_values
+enum __attribute__((packed)) ds_reply_values
 {
     SYS_COMMAND_OK_REPLY_VAL                = 0,
     READ_REGISTER_OK_REPLY_VAL              = 1,
@@ -151,7 +151,9 @@ enum ds_reply_values
     CONTROL_INTERFACE_ERROR_REPLY_VAL       = -6,
     SYNTAX_ERROR_REPLY_VAL                  = -7,
     PARAMETERS_ERROR_REPLY_VAL              = -8,
-    CRC_ERROR_REPLY_VAL                     = -9
+    CRC_ERROR_REPLY_VAL                     = -9,
+
+    DS_REPLY_VAL_DUMMY                      = 0x7FFF  // Ensure enum is 16-bit (matches int16_t status field in packet)
 };
 
 // define strings to be used in the replies if the reply is a string --> to be implemented later
@@ -171,27 +173,16 @@ enum ds_reply_values
 #define PARAMETERS_ERROR_REPLY_STRING           "Parameters Error\r\n"
 #define CRC_ERROR_REPLY_STRING                  "CRC Error\r\n"
 
-// Core system commands processed by dsProcessSysCommand
-// User-defined commands occupy 0–199; library commands are at 200–202.
-// Users can define their own commands as a plain zero-based enum with no offset needed.
-typedef enum
-{
-    // Library system commands (200-255 reserved for library use)
-    ds_sys_command_READ_FLASH          = 200,  // Read parameters from flash
-    ds_sys_command_WRITE_FLASH         = 201,  // Write parameters to flash
-    ds_sys_command_RESET_FIRMWARE      = 202,  // Reset the firmware
-
-    ds_sys_command_DUMMY               = 0xFFFFFFFF    // Ensure enum is 32-bit
-}ds_sys_command_t;
 
 // A union to hold the datastream output packet, can be acessed as a buffer or as a structure
-typedef union 
+// aligned(4) ensures value (at offset 4) is always naturally aligned -> atomic 32-bit access without a critical section
+typedef union __attribute__((aligned(4)))
 {
     uint8_t buffer[DATASTREAM_OUTPUT_SIZE];
     struct PACKED
     {
-        int8_t  status;
-        uint8_t  address;
+        int16_t  status;
+        uint16_t address;
         uint32_t value;
         #if(CRC8_ENABLE)
             uint8_t  crc;
@@ -199,14 +190,15 @@ typedef union
     }contents;
 }dsTxPacket;
 
-// A union to hold the datastream input packet, can be acessed as a buffer or as a structure
-typedef union 
+// A union to hold the datastream input packet, can be accessed as a buffer or as a structure
+// aligned(4) ensures value (at offset 4) is always naturally aligned -> atomic 32-bit access without a critical section
+typedef union __attribute__((aligned(4)))
 {
     uint8_t buffer[DATASTREAM_INPUT_SIZE];
     struct PACKED
     {
-        uint8_t  type;
-        uint8_t  address;
+        uint16_t type;
+        uint16_t address;
         uint32_t value;
         #if(CRC8_ENABLE)
             uint8_t  crc;
@@ -217,13 +209,13 @@ typedef union
 /* reply types for a given datastream input packet */
 typedef struct
 {
-    int8_t  val;
+    int16_t val;
     char    string[20];
 }reply_t;
 
 // Core input types for the datastream protocol
 // Users can extend this enum by defining additional types starting from ds_type_USER_DEFINED_START
-typedef enum
+typedef enum __attribute__((packed))
 {
     // Core datastream input types (0-99 reserved for library use)
     ds_type_SYS_COMMAND              = 0,    // Send system commands to the system
@@ -236,10 +228,23 @@ typedef enum
     ds_type_WRITE_SYSTEM_REGISTER    = 7,    // Write a system register (currently all read-only)
 
     // User-defined input types should start from this value
-    ds_type_USER_DEFINED_START  = 100,
+    ds_type_USER_DEFINED_START       = 100,
 
-    ds_type_DUMMY               = 0xFFFFFFFF    // Ensure enum is 32-bit
+    ds_type_DUMMY                    = 0xFFFF    // Ensure enum is 16-bit (matches uint16_t type field in packet)
 } ds_type_t;
+
+// Core system commands processed by dsProcessSysCommand
+// User-defined commands occupy 0–199; library commands are at 200–202.
+// Users can define their own commands as a plain zero-based enum with no offset needed.
+typedef enum __attribute__((packed))
+{
+    // Library system commands (65000-65535 reserved for library use)
+    ds_sys_command_READ_FLASH          = 65000,  // Read parameters from flash
+    ds_sys_command_WRITE_FLASH         = 65001,  // Write parameters to flash
+    ds_sys_command_RESET_FIRMWARE      = 65002,  // Reset the firmware
+
+    ds_sys_command_DUMMY               = 0xFFFF  // Ensure enum is 16-bit (matches uint16_t address field in packet)
+}ds_sys_command_t;
 
 /** @defgroup reply_objects Reply Objects
  *  @brief Pre-initialized reply structures for common responses
@@ -322,7 +327,7 @@ bool dsProcessUserDefinedType(dsRxPacket *inPacket, dsTxPacket *outPacket, reply
  * @param[in]  inPacketSize Actual size of received packet
  * @param[out] outPacket    Response packet to populate with error
  */
-void dsPacketSizeError(uint32_t inPacketSize, dsTxPacket *outPacket);
+void dsPacketSizeError(uint16_t inPacketSize, dsTxPacket *outPacket);
 
 /**
  * @brief Check if current task has write permission
@@ -437,7 +442,7 @@ void dsReadBoardNameFromFlash(char* name, size_t maxLen);
  * Defines which task/interface has write permission to registers and parameters.
  * Users can extend this enum by defining values >= ds_control_USER_DEFINED_START.
  */
-typedef enum
+typedef enum __attribute__((packed))
 {
     ds_control_UNDECIDED       = 0,    /**< No task has control (initial state) */
     ds_control_TCP_DATASTREAM  = 1,    /**< TCP datastream task has control */
@@ -449,7 +454,7 @@ typedef enum
     ds_control_TCP_CLI         = 101,  /**< TCP CLI interface control */
     ds_control_USB             = 102,  /**< USB CLI interface control */
 
-    ds_control_DUMMY           = 0xFFFFFFFF    /**< Ensure enum is 32-bit */
+    ds_control_DUMMY           = 0xFF  /**< Ensure enum is 8-bit */
 } ds_control_interface_t;
 
 /**
@@ -532,7 +537,7 @@ ds_control_interface_t dsGetTaskControlType(TaskHandle_t taskHandle);
 /**
  * @brief Auto-detection command types
  */
-typedef enum
+typedef enum __attribute__((packed))
 {
     DS_DISCOVERY_REQUEST    = 0x01,  /**< Discovery request from client */
     DS_DISCOVERY_RESPONSE   = 0x02   /**< Discovery response from board */

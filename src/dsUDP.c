@@ -252,7 +252,7 @@ void prvdsUDPTask(void *pvParameters)
             else if (lBytes > 0)
             {
                 // Invalid packet size for datastream, send error response
-                dsPacketSizeError((uint32_t)lBytes, &txPacket);
+                dsPacketSizeError((uint16_t)lBytes, &txPacket);
                 lSent = dsUDPSendTo(listeningSocket, txPacket.buffer, DATASTREAM_OUTPUT_SIZE, 0, &client, xSize);
             }
             else if (lBytes < 0) 

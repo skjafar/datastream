@@ -321,7 +321,7 @@ void prvdsTCPTask(void *pvParameters)
             else if (lBytes >= 0)
             {
                 // Packet size error, get proper response from datastream
-                dsPacketSizeError((uint32_t)lBytes, &txPacket);
+                dsPacketSizeError((uint16_t)lBytes, &txPacket);
 
                 lSent = dsTCPSend(connectedSocket, txPacket.buffer, DATASTREAM_OUTPUT_SIZE, 0);
 

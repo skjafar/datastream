@@ -419,7 +419,7 @@ static void dsCLIProcessLine(dsSocket_t xSocket, char *line, char *outBuffer, si
 static void cmdReadReg(dsSocket_t xSocket, const char *args, char *outBuffer, size_t outLen)
 {
     char *endptr;
-    uint32_t address = (uint32_t)strtoul(args, &endptr, 10);
+    uint16_t address = (uint16_t)strtoul(args, &endptr, 10);
 
     if (endptr == args)
     {
@@ -445,7 +445,7 @@ static void cmdReadReg(dsSocket_t xSocket, const char *args, char *outBuffer, si
 static void cmdWriteReg(dsSocket_t xSocket, const char *args, char *outBuffer, size_t outLen)
 {
     char *endptr;
-    uint32_t address = (uint32_t)strtoul(args, &endptr, 10);
+    uint16_t address = (uint16_t)strtoul(args, &endptr, 10);
 
     if (endptr == args)
     {
@@ -480,7 +480,7 @@ static void cmdWriteReg(dsSocket_t xSocket, const char *args, char *outBuffer, s
 static void cmdReadPar(dsSocket_t xSocket, const char *args, char *outBuffer, size_t outLen)
 {
     char *endptr;
-    uint32_t address = (uint32_t)strtoul(args, &endptr, 10);
+    uint16_t address = (uint16_t)strtoul(args, &endptr, 10);
 
     if (endptr == args)
     {
@@ -506,7 +506,7 @@ static void cmdReadPar(dsSocket_t xSocket, const char *args, char *outBuffer, si
 static void cmdWritePar(dsSocket_t xSocket, const char *args, char *outBuffer, size_t outLen)
 {
     char *endptr;
-    uint32_t address = (uint32_t)strtoul(args, &endptr, 10);
+    uint16_t address = (uint16_t)strtoul(args, &endptr, 10);
 
     if (endptr == args)
     {
@@ -564,7 +564,7 @@ static void cmdSys(dsSocket_t xSocket, const char *args, char *outBuffer, size_t
     memset(&outputPacket, 0, sizeof(outputPacket));
 
     inputPacket.contents.type = ds_type_SYS_COMMAND;
-    inputPacket.contents.address = (uint8_t)command;
+    inputPacket.contents.address = (uint16_t)command;
     inputPacket.contents.value = value;
 
     dsProcessSysCommand(&inputPacket, &outputPacket);
@@ -584,7 +584,7 @@ static void cmdSys(dsSocket_t xSocket, const char *args, char *outBuffer, size_t
 
 static void cmdRegs(dsSocket_t xSocket, char *outBuffer, size_t outLen)
 {
-    for (uint32_t i = 0; i < DS_REGISTER_COUNT; i++)
+    for (uint16_t i = 0; i < DS_REGISTER_COUNT; i++)
     {
         const char *access = (i < DS_REGISTERS_READ_ONLY_COUNT) ? "RO" : "RW";
         snprintf(outBuffer, outLen, "[%lu] = %lu (%s)\r\n",
@@ -595,7 +595,7 @@ static void cmdRegs(dsSocket_t xSocket, char *outBuffer, size_t outLen)
 
 static void cmdPars(dsSocket_t xSocket, char *outBuffer, size_t outLen)
 {
-    for (uint32_t i = 0; i < DS_PARAMETER_COUNT; i++)
+    for (uint16_t i = 0; i < DS_PARAMETER_COUNT; i++)
     {
         snprintf(outBuffer, outLen, "[%lu] = %lu\r\n",
                  (unsigned long)i, (unsigned long)PARS.byAddress[i]);

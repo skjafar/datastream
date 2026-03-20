@@ -25,7 +25,7 @@ ds_registers_t REGS;
 
 /* ======================== System Register Access ======================== */
 
-uint32_t dsGetSystemRegister(uint32_t address, reply_t *reply)
+uint32_t dsGetSystemRegister(uint16_t address, reply_t *reply)
 {
     if (address < DS_SYSTEM_REGISTER_COUNT)
     {
@@ -45,7 +45,7 @@ uint32_t dsGetSystemRegister(uint32_t address, reply_t *reply)
     }
 }
 
-void dsSetSystemRegister(uint32_t address, uint32_t value, reply_t *reply)
+void dsSetSystemRegister(uint16_t address, uint32_t value, reply_t *reply)
 {
     (void)address;
     (void)value;
@@ -55,7 +55,7 @@ void dsSetSystemRegister(uint32_t address, uint32_t value, reply_t *reply)
 
 /* ======================== User Register Access ======================== */
 
-void dsSetRegister(uint32_t address, uint32_t value, reply_t * reply)
+void dsSetRegister(uint16_t address, uint32_t value, reply_t * reply)
 {
     if (dsCheckTaskWritePermission())
     {
@@ -91,7 +91,7 @@ void dsSetRegister(uint32_t address, uint32_t value, reply_t * reply)
 }
 
 
-uint32_t dsGetRegister(uint32_t address, reply_t * reply)
+uint32_t dsGetRegister(uint16_t address, reply_t * reply)
 {
     if (address < DS_REGISTER_COUNT)
     {
@@ -143,12 +143,12 @@ WEAK void dsInitializeRegisters(ds_registers_t * regList)
 
 // Weak functions to allow for custom register handling
 // These can be overridden in the application if needed
-WEAK void dsRegisterSetCallback(uint32_t address, uint32_t oldValue, uint32_t newValue)
+WEAK void dsRegisterSetCallback(uint16_t address, uint32_t oldValue, uint32_t newValue)
 {
     // Default: do nothing
 }
 
-WEAK void dsRegisterGetCallback(uint32_t address, uint32_t value)
+WEAK void dsRegisterGetCallback(uint16_t address, uint32_t value)
 {
     // Default: do nothing
 }

@@ -308,7 +308,7 @@ WEAK bool dsProcessUserSysCommand(const dsRxPacket *inputPacket, dsTxPacket *out
     return false;
 }
 
-void dsPacketSizeError(uint32_t inPacketSize, dsTxPacket *outPacket)
+void dsPacketSizeError(uint16_t inPacketSize, dsTxPacket *outPacket)
 {
     // This function is called when the received packet size is not equal to DATASTREAM_INPUT_SIZE
     // It will return an error message in the output packet

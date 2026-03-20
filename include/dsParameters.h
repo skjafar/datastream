@@ -38,8 +38,8 @@ DS_STATIC_ASSERT(sizeof(ds_parameter_names_t) % 4 == 0, "ds_parameter_names_t si
 /** @brief Total number of parameters */
 #define DS_PARAMETER_COUNT     (DS_PARAMETERS_T_SIZE / sizeof(uint32_t))
 
-/** Ensure parameter count fits in the protocol's uint8_t address field */
-DS_STATIC_ASSERT(sizeof(ds_parameter_names_t) / 4 <= 256, "Parameter count exceeds uint8_t address space (max 256)");
+/** Ensure parameter count fits in the protocol's uint16_t address field */
+DS_STATIC_ASSERT(sizeof(ds_parameter_names_t) / 4 <= 65536, "Parameter count exceeds uint16_t address space (max 65536)");
 
 /**
  * @brief Parameter storage union
@@ -71,7 +71,7 @@ extern ds_parameters_t PARS;
  * @note Changes are stored in RAM only until dsWriteParametersToFlash() is called
  * @note Triggers dsParameterSetCallback() on successful write
  */
-void dsSetParameter(uint32_t address, uint32_t value, reply_t * reply);
+void dsSetParameter(uint16_t address, uint32_t value, reply_t * reply);
 
 /**
  * @brief Get parameter value by address/index
@@ -85,7 +85,7 @@ void dsSetParameter(uint32_t address, uint32_t value, reply_t * reply);
  * @note Triggers dsParameterGetCallback() on successful read
  * @note reply can be NULL if status not needed
  */
-uint32_t dsGetParameter(uint32_t address, reply_t * reply);
+uint32_t dsGetParameter(uint16_t address, reply_t * reply);
 
 /**
  * @brief Write parameters to flash memory (weak function)
@@ -184,7 +184,7 @@ void dsInitializeParameters(ds_parameters_t * parList);
  * @note Called AFTER parameter value is updated in RAM
  * @note Changes are not automatically saved to flash
  */
-void dsParameterSetCallback(uint32_t address, uint32_t oldValue, uint32_t newValue);
+void dsParameterSetCallback(uint16_t address, uint32_t oldValue, uint32_t newValue);
 
 /**
  * @brief Callback invoked after parameter read (weak function)
@@ -198,7 +198,7 @@ void dsParameterSetCallback(uint32_t address, uint32_t oldValue, uint32_t newVal
  * @note This is a weak function - override in your application
  * @note Called AFTER parameter value is retrieved
  */
-void dsParameterGetCallback(uint32_t address, uint32_t value);
+void dsParameterGetCallback(uint16_t address, uint32_t value);
 
 /** @} */ // end of parameters group
 

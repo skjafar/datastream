@@ -33,8 +33,8 @@ DS_STATIC_ASSERT(sizeof(ds_system_register_names_t) % 4 == 0, "ds_system_registe
 /** @brief Total number of system registers */
 #define DS_SYSTEM_REGISTER_COUNT        (sizeof(ds_system_register_names_t) / sizeof(uint32_t))
 
-/** @brief Ensure system register count fits in the protocol's uint8_t address field */
-DS_STATIC_ASSERT(sizeof(ds_system_register_names_t) / 4 <= 256, "System register count exceeds uint8_t address space (max 256)");
+/** @brief Ensure system register count fits in the protocol's uint16_t address field */
+DS_STATIC_ASSERT(sizeof(ds_system_register_names_t) / 4 <= 65536, "System register count exceeds uint16_t address space (max 65536)");
 
 /**
  * @brief System register storage union (library-owned)
@@ -62,8 +62,8 @@ DS_STATIC_ASSERT(sizeof(ds_register_names_t) % 4 == 0, "ds_register_names_t size
 /** @brief Total number of user registers */
 #define DS_REGISTER_COUNT               (DS_REGISTERS_BY_NAME_T_SIZE / sizeof(uint32_t))
 
-/** Ensure register count fits in the protocol's uint8_t address field */
-DS_STATIC_ASSERT(sizeof(ds_register_names_t) / 4 <= 256, "Register count exceeds uint8_t address space (max 256)");
+/** Ensure register count fits in the protocol's uint16_t address field */
+DS_STATIC_ASSERT(sizeof(ds_register_names_t) / 4 <= 65536, "Register count exceeds uint16_t address space (max 65536)");
 
 /**
  * @brief User register storage union
@@ -90,7 +90,7 @@ extern ds_registers_t REGS;
  * @param[out] reply   Operation result (READ_REGISTER_OK or ADDRESS_OUT_OF_RANGE_ERROR)
  * @return Register value, or 0 if address out of range
  */
-uint32_t dsGetSystemRegister(uint32_t address, reply_t *reply);
+uint32_t dsGetSystemRegister(uint16_t address, reply_t *reply);
 
 /**
  * @brief Set system register value by address/index
@@ -104,7 +104,7 @@ uint32_t dsGetSystemRegister(uint32_t address, reply_t *reply);
  * @param[in]  value   Value (ignored — system registers are read-only)
  * @param[out] reply   Always set to PERMISSION_ERROR
  */
-void dsSetSystemRegister(uint32_t address, uint32_t value, reply_t *reply);
+void dsSetSystemRegister(uint16_t address, uint32_t value, reply_t *reply);
 
 /**
  * @brief Set register value by address/index
@@ -120,7 +120,7 @@ void dsSetSystemRegister(uint32_t address, uint32_t value, reply_t *reply);
  *
  * @note Triggers dsRegisterSetCallback() on successful write
  */
-void dsSetRegister(uint32_t address, uint32_t value, reply_t * reply);
+void dsSetRegister(uint16_t address, uint32_t value, reply_t * reply);
 
 /**
  * @brief Get register value by address/index
@@ -134,7 +134,7 @@ void dsSetRegister(uint32_t address, uint32_t value, reply_t * reply);
  * @note Triggers dsRegisterGetCallback() on successful read
  * @note reply can be NULL if status not needed
  */
-uint32_t dsGetRegister(uint32_t address, reply_t * reply);
+uint32_t dsGetRegister(uint16_t address, reply_t * reply);
 
 /**
  * @brief Initialize system registers to default values (weak function)
@@ -173,7 +173,7 @@ void dsInitializeRegisters(ds_registers_t * regList);
  * @note This is a weak function - override in your application
  * @note Called AFTER register value is updated
  */
-void dsRegisterSetCallback(uint32_t address, uint32_t oldValue, uint32_t newValue);
+void dsRegisterSetCallback(uint16_t address, uint32_t oldValue, uint32_t newValue);
 
 /**
  * @brief Callback invoked after register read (weak function)
@@ -187,7 +187,7 @@ void dsRegisterSetCallback(uint32_t address, uint32_t oldValue, uint32_t newValu
  * @note This is a weak function - override in your application
  * @note Called AFTER register value is retrieved
  */
-void dsRegisterGetCallback(uint32_t address, uint32_t value);
+void dsRegisterGetCallback(uint16_t address, uint32_t value);
 
 /** @} */ // end of registers group
 

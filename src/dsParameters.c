@@ -29,7 +29,7 @@ ds_parameters_t PARS;
 /*
  * change value of parameter using it's address in the struct
  */
-void dsSetParameter(uint32_t address, uint32_t value, reply_t * reply)
+void dsSetParameter(uint16_t address, uint32_t value, reply_t * reply)
 {
     // Check if the current task has permission to write to registers or parameters
     if (dsCheckTaskWritePermission())
@@ -58,7 +58,7 @@ void dsSetParameter(uint32_t address, uint32_t value, reply_t * reply)
 /*
  * get value of parameter using it's address in the struct
  */
-uint32_t dsGetParameter(uint32_t address, reply_t * reply)
+uint32_t dsGetParameter(uint16_t address, reply_t * reply)
 {
     if (address < DS_PARAMETER_COUNT)
     {
@@ -130,13 +130,13 @@ WEAK void dsSetParametersDefaults(ds_parameters_t * parList)
 }
 
 /* Callback for when a parameter is set */
-WEAK void dsParameterSetCallback(uint32_t address, uint32_t oldValue, uint32_t newValue) 
+WEAK void dsParameterSetCallback(uint16_t address, uint32_t oldValue, uint32_t newValue) 
 {
       // Default: do nothing
 }
 
 /* Callback for when a parameter is read */
-WEAK void dsParameterGetCallback(uint32_t address, uint32_t value)
+WEAK void dsParameterGetCallback(uint16_t address, uint32_t value)
 {
       // Default: do nothing
 }
