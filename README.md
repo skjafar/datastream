@@ -1,4 +1,4 @@
-# Datastream v0.2.1
+# Datastream v0.2.2
 
 A cross-platform, lightweight communication protocol library for embedded systems, providing TCP and UDP interfaces for real-time parameter and register management.
 
