@@ -1,21 +1,36 @@
 # Commercial Licensing
 
-The datastream library is free for personal, hobby, and non-profit use under the
-[PolyForm Noncommercial License 1.0.0](LICENSE).
+The datastream library is free for personal, hobby, educational, and non-profit use under the [PolyForm Noncommercial License 1.0.0](LICENSE). Any use that generates revenue or is intended for commercial gain requires a separate commercial license.
 
-## When do you need a commercial license?
+---
 
-You need a commercial license if you use this library in any product, service,
-or activity that generates revenue or is intended for commercial gain. This includes:
+## When you need a commercial license
 
-- Products sold to customers (hardware or software)
-- Internal tools used by a for-profit business
+You need a commercial license if the library is used in — or materially supports — any of the following:
+
+- Products sold to customers (hardware, firmware, or software)
 - Services offered to paying customers
-- Any other for-profit application
+- Internal tools at a for-profit business
+- Revenue-generating research, consulting, or integration work
+- Any other activity undertaken for commercial gain
 
-## How to obtain a commercial license
+Personal projects, coursework, academic research, and non-profit work remain free under the noncommercial license.
 
-Contact: **[skjafar@gmail.com]**
+## Requesting a commercial license
 
-Please include a brief description of your intended use and the scope of your
-project. Licensing terms are negotiated on a case-by-case basis.
+Contact **[skjafar@gmail.com](mailto:skjafar@gmail.com)** with:
+
+- A brief description of your intended use
+- Scope (single product, product family, company-wide, etc.)
+- Expected deployment volume, if known
+
+Terms are negotiated case-by-case. Typical turnaround is a few business days.
+
+---
+
+```
+SPDX-License-Identifier: LicenseRef-PolyForm-Noncommercial-1.0.0
+Copyright (c) 2026 Sofian Jafar
+```
+
+See also: [README.md](README.md) · [USER_INTEGRATION_GUIDE.md](USER_INTEGRATION_GUIDE.md)

@@ -1,84 +1,85 @@
-# Datastream Library — User Integration Guide
+# Datastream — User Integration Guide
 
-Version 2.0 | Last Updated: 2026-03-15
-
-This guide explains how to integrate the datastream library into your project without modifying the library files, taking advantage of the external configuration system.
+A full walkthrough for dropping the datastream library into an embedded project without modifying its source. For protocol details and API reference, see [README.md](README.md).
 
 ---
 
-## Table of Contents
+## Contents
 
-1. [Quick Start (5 Minutes)](#quick-start-5-minutes)
-2. [Adding to an ESP-IDF Project](#adding-to-an-esp-idf-project)
-3. [Adding to an STM32CubeIDE Project](#adding-to-an-stm32cubeside-project)
-4. [Testing Your Setup](#testing-your-setup)
-5. [Overview](#overview)
-6. [What's New in Version 2.0](#whats-new-in-version-20)
-7. [Configuration Methods](#configuration-methods)
-8. [Defining Registers and Parameters](#defining-your-registers)
-9. [System Registers](#system-registers)
-10. [Task Registration System](#task-registration-system)
-11. [Implementing Flash Storage](#implementing-flash-storage)
-12. [Implementing Custom System Commands](#implementing-custom-system-commands)
+1. [How It Fits Together](#how-it-fits-together)
+2. [Quick Start (5 Minutes)](#quick-start-5-minutes)
+3. [Platform Setup](#platform-setup)
+   - [CMake / Pico SDK / Generic](#cmake--pico-sdk--generic)
+   - [ESP-IDF](#esp-idf)
+   - [STM32CubeIDE](#stm32cubeide)
+4. [Configuring the Library](#configuring-the-library)
+5. [Defining Registers](#defining-registers)
+6. [Defining Parameters](#defining-parameters)
+7. [System Registers](#system-registers)
+8. [Flash Persistence](#flash-persistence)
+9. [Custom System Commands](#custom-system-commands)
+10. [Control Interface & Task Registration](#control-interface--task-registration)
+11. [Custom Types and Callbacks](#custom-types-and-callbacks)
+12. [Testing Your Setup](#testing-your-setup)
 13. [Troubleshooting](#troubleshooting)
+14. [Best Practices](#best-practices)
+
+---
+
+## How It Fits Together
+
+Everything you add to a datastream-enabled project lives **outside** the library folder:
+
+```
+your_project/
+├── <your source>
+├── ds_app_config.h        ← master config (required if you want to override defaults)
+├── my_registers.h         ← your runtime state   (optional — library has a minimal default)
+├── my_parameters.h        ← your persistent data (optional — same)
+└── datastream/            ← library source (never edit)
+    ├── include/
+    └── src/
+```
+
+The library discovers your configuration automatically through `__has_include`. You never include `datastream.h` with special flags; just put `ds_app_config.h` somewhere on the include path and the rest is handled.
+
+**Three things you will likely always do:**
+1. Create `ds_app_config.h` with your platform and board identity.
+2. Declare your register and parameter structs.
+3. Implement `dsReadParametersFromFlash()` / `dsWriteParametersToFlash()` for persistence.
+
+Everything else is optional.
 
 ---
 
 ## Quick Start (5 Minutes)
 
-### Step 1: Add Library to Your Project
+### 1. Add the library
 
-See [Adding to an ESP-IDF Project](#adding-to-an-esp-idf-project) or [Adding to an STM32CubeIDE Project](#adding-to-an-stm32cubeside-project) for platform-specific instructions.
+Pick the matching [platform setup](#platform-setup) section below. The rest of this Quick Start is platform-agnostic.
 
-For CMake-based projects (RP2040, RP2350, generic):
-
-```
-your_project/
-├── src/
-│   └── main.c
-├── include/
-│   └── ds_app_config.h      <-- Your configuration
-└── lib/
-    └── datastream/          <-- Library (do not modify)
-        ├── include/
-        └── src/
-```
-
-```cmake
-add_subdirectory(lib/datastream)
-target_link_libraries(${PROJECT_NAME} PRIVATE datastream)
-target_include_directories(${PROJECT_NAME} PRIVATE include)
-```
-
-### Step 2: Create Configuration File
-
-Create `ds_app_config.h` in your include path:
+### 2. Create `ds_app_config.h`
 
 ```c
 #ifndef DS_APP_CONFIG_H_
 #define DS_APP_CONFIG_H_
 
-// Required: select your platform
-#define DS_PLATFORM ESP32   // ESP32, STM32, RP2040, RP2350, GENERIC_PLATFORM
+#define DS_PLATFORM     ESP32               // ESP32, STM32, RP2040, RP2350, GENERIC_PLATFORM
+#define DS_BOARD_NAME   "MyDevice"
+#define DS_BOARD_TYPE   1
+#define DS_BOARD_ID     0x00000001
 
-// Board identification
-#define DS_BOARD_NAME "MyDevice"
-#define DS_BOARD_TYPE 1
-#define DS_BOARD_ID   0x00000001
+#define DS_TCP_PORT     2009
+#define DS_UDP_PORT     2011
 
-// Network ports (defaults shown)
-#define DS_TCP_PORT 2009
-#define DS_UDP_PORT 2011
+#define DS_AUTO_DETECTION_ENABLE  1
+#define DS_STATS_ENABLE           1
+#define CRC8_ENABLE               0
 
-// Features
-#define DS_AUTO_DETECTION_ENABLE 1
-#define DS_STATS_ENABLE 1
-#define CRC8_ENABLE 0
-
-#endif // DS_APP_CONFIG_H_
+#endif
 ```
 
-### Step 3: Initialize in Your Application
+### 3. Initialize in your application
 
 ```c
 #include "datastream.h"
@@ -87,43 +88,66 @@ Create `ds_app_config.h` in your include path:
 
 void app_main(void)
 {
+    // Bring up the network stack first (WiFi / Ethernet / etc.), then:
     dsInitialize();
-    dsTCPTaskCreate();   // TCP server on port 2009
-    dsUDPTaskCreate();   // UDP server on port 2011 (with auto-detection)
-    vTaskStartScheduler();
+    dsTCPTaskCreate();
+    dsUDPTaskCreate();
 }
 ```
 
-### Step 4: Build and Flash
+### 4. Flash and verify
 
-Once flashed, the device will:
-- Listen for TCP connections on port 2009
-- Listen for UDP packets on port 2011
-- Respond to auto-detection broadcast requests
+The device will:
+- Accept TCP connections on `DS_TCP_PORT`.
+- Serve UDP requests on `DS_UDP_PORT`.
+- Respond to broadcast discovery on the same UDP port.
+
+Jump to [Testing Your Setup](#testing-your-setup) for a first end-to-end check.
 
 ---
 
-## Adding to an ESP-IDF Project
+## Platform Setup
 
-### Step 1: Copy Library as a Component
+### CMake / Pico SDK / Generic
+
+A minimal CMake layout:
 
 ```
-your_esp_project/
+your_project/
+├── CMakeLists.txt
+├── src/main.c
+├── include/ds_app_config.h
+└── lib/datastream/          (library as a subdirectory)
+```
+
+```cmake
+add_subdirectory(lib/datastream)
+
+target_include_directories(${PROJECT_NAME} PRIVATE include)
+target_link_libraries(${PROJECT_NAME} PRIVATE datastream)
+```
+
+For RP2040 / RP2350, do this after `pico_sdk_init()` and link FreeRTOS+TCP as usual.
+
+### ESP-IDF
+
+Copy the library to `components/datastream/` and create a component build file:
+
+```
+your_project/
 ├── main/
 │   ├── main.c
-│   ├── ds_app_config.h       <-- your config
+│   ├── ds_app_config.h
 │   └── CMakeLists.txt
 └── components/
     └── datastream/
-        ├── CMakeLists.txt    <-- create this
+        ├── CMakeLists.txt      (create this)
         ├── include/
         └── src/
 ```
 
-### Step 2: Create the Component CMakeLists.txt
-
+`components/datastream/CMakeLists.txt`:
 ```cmake
-# components/datastream/CMakeLists.txt
 idf_component_register(
     SRCS
         "src/datastream.c"
@@ -131,404 +155,134 @@ idf_component_register(
         "src/dsParameters.c"
         "src/dsTCP.c"
         "src/dsUDP.c"
-    INCLUDE_DIRS
-        "include"
-    PRIV_REQUIRES
-        freertos
-        esp_netif
-        lwip
+        # "src/dsCLI.c"      # add if DS_CLI_ENABLE is set
+    INCLUDE_DIRS "include"
+    PRIV_REQUIRES freertos esp_netif lwip
 )
 ```
 
-If you enable `DS_CLI_ENABLE 1`, also add `"src/dsCLI.c"` to SRCS.
-
-### Step 3: Make ds_app_config.h Visible
-
-The library uses `__has_include` to auto-detect `ds_app_config.h`. Place it in `main/` and ensure `main/` is in the component's `INCLUDE_DIRS`, or add it to your main component:
-
+`main/CMakeLists.txt` — make sure the directory holding `ds_app_config.h` is on the include path so the library can find it:
 ```cmake
-# main/CMakeLists.txt
 idf_component_register(
     SRCS "main.c"
-    INCLUDE_DIRS "."        # This makes ds_app_config.h findable
+    INCLUDE_DIRS "."
     REQUIRES datastream
 )
 ```
 
-### Step 4: Configure for ESP32
-
-In `ds_app_config.h`:
-
+Initialize **after** the network stack has an IP:
 ```c
-#define DS_PLATFORM ESP32
+wifi_init_and_connect();
+wait_for_ip();
 
-// Optional: enable ESP-IDF logging
-#define ESP32_LOGGING_ENABLE 1
-
-// Point to your register/parameter files
-#define DS_USER_REGISTER_DEFINITIONS  "my_registers.h"
-#define DS_USER_PARAMETER_DEFINITIONS "my_parameters.h"
+dsInitialize();
+dsTCPTaskCreate();
+dsUDPTaskCreate();
 ```
 
-### Step 5: Initialize After Network Stack
+### STM32CubeIDE
 
-```c
-#include "datastream.h"
-#include "dsTCP.h"
-#include "dsUDP.h"
-#include "esp_wifi.h"
-#include "esp_event.h"
+1. Copy the library to `Middlewares/Third_Party/datastream/`.
+2. In the CubeIDE Project Explorer, right-click the project → **Refresh**.
+3. **Project → Properties → C/C++ Build → Settings → MCU GCC Compiler → Include Paths.** Add (for both Debug and Release):
+   ```
+   ../Middlewares/Third_Party/datastream/include
+   ```
+4. If any `.c` under `Middlewares/Third_Party/datastream/src/` shows an "excluded from build" badge, right-click it → **Resource Configurations → Exclude from build** → uncheck both configurations.
+5. Create `Core/Inc/ds_app_config.h` (`Core/Inc` is already on the default include path, so the library will find it automatically):
+   ```c
+   #define DS_PLATFORM   STM32
+   #define DS_BOARD_NAME "My STM32 Board"
+   ```
+6. Make sure **FreeRTOS+TCP** is enabled and configured in the project — the STM32 platform relies on it for sockets (`FreeRTOS_IP.h`, `FreeRTOS_Sockets.h`).
+7. Initialize from `main.c` after peripheral init:
+   ```c
+   HAL_Init();
+   SystemClock_Config();
+   MX_GPIO_Init();
+   MX_ETH_Init();
 
-void app_main(void)
-{
-    // Initialize WiFi/Ethernet and wait for IP before calling dsInitialize()
-    wifi_init_and_connect();
-    wait_for_ip();
+   dsInitialize();
+   dsTCPTaskCreate();
+   dsUDPTaskCreate();
 
-    dsInitialize();
-    dsTCPTaskCreate();
-    dsUDPTaskCreate();
-}
-```
+   vTaskStartScheduler();
+   ```
 
-### Step 6: Implement Flash Storage (NVS Example)
-
-```c
-#include "nvs_flash.h"
-#include "nvs.h"
-#include "dsParameters.h"
-
-void dsWriteParametersToFlash(ds_parameters_t *parList)
-{
-    nvs_handle_t handle;
-    if (nvs_open("datastream", NVS_READWRITE, &handle) == ESP_OK)
-    {
-        nvs_set_blob(handle, "params", parList, sizeof(ds_parameters_t));
-        nvs_commit(handle);
-        nvs_close(handle);
-    }
-}
-
-void dsReadParametersFromFlash(ds_parameters_t *parList)
-{
-    nvs_handle_t handle;
-    size_t size = sizeof(ds_parameters_t);
-    if (nvs_open("datastream", NVS_READONLY, &handle) == ESP_OK)
-    {
-        nvs_get_blob(handle, "params", parList, &size);
-        nvs_close(handle);
-    }
-}
-```
+> **IntelliSense warnings about `uint32_t`** in library headers are indexer artefacts — the build itself will still succeed.
 
 ---
 
-## Adding to an STM32CubeIDE Project
-
-### Step 1: Copy Library Files
-
-Copy the `datastream/` folder to `Middlewares/Third_Party/` in your project:
-
-```
-your_project/
-├── Core/
-│   ├── Inc/
-│   │   └── ds_app_config.h    <-- create this
-│   └── Src/
-└── Middlewares/
-    └── Third_Party/
-        └── datastream/
-            ├── include/
-            └── src/
-```
-
-In STM32CubeIDE, right-click the project → **Refresh** to detect the new files.
-
-### Step 2: Add Include Path
-
-Open **Project → Properties → C/C++ Build → Settings → MCU GCC Compiler → Include Paths**.
-
-Add the following path and click **OK**:
-```
-../Middlewares/Third_Party/datastream/include
-```
-
-Do this for **both** Debug and Release configurations.
-
-### Step 3: Verify Source Files Are in the Build
-
-In the Project Explorer, expand `Middlewares/Third_Party/datastream/src/`. If any `.c` file has a small badge indicating it is excluded from the build, right-click it → **Resource Configurations → Exclude from build** → uncheck both Debug and Release.
-
-### Step 4: Create Your Configuration File
-
-Create `Core/Inc/ds_app_config.h`:
-
-```c
-#ifndef DS_APP_CONFIG_H_
-#define DS_APP_CONFIG_H_
-
-#define DS_PLATFORM             STM32
-#define DS_BOARD_NAME           "My STM32 Board"
-#define DS_BOARD_ID             0x00000001
-#define DS_AUTO_DETECTION_ENABLE 1
-#define DS_STATS_ENABLE         1
-#define CRC8_ENABLE             0
-
-#define DS_USER_REGISTER_DEFINITIONS  "my_registers.h"
-#define DS_USER_PARAMETER_DEFINITIONS "my_parameters.h"
-
-#endif
-```
-
-The `Core/Inc/` directory is already in the default include path of CubeMX-generated projects, so `ds_app_config.h` will be auto-detected by the library.
-
-### Step 5: Initialize in main.c
-
-```c
-#include "datastream.h"
-#include "dsTCP.h"
-#include "dsUDP.h"
-
-int main(void)
-{
-    HAL_Init();
-    SystemClock_Config();
-    MX_GPIO_Init();
-    MX_ETH_Init();      // or whatever your network peripheral is
-    // ... other CubeMX init calls ...
-
-    dsInitialize();
-    dsTCPTaskCreate();
-    dsUDPTaskCreate();
-
-    vTaskStartScheduler();
-    while (1) {}
-}
-```
-
-### Step 6: Implement Flash Storage
-
-```c
-#include "dsParameters.h"
-
-// Example using a dedicated flash sector at FLASH_USER_START_ADDR
-void dsWriteParametersToFlash(ds_parameters_t *parList)
-{
-    FLASH_EraseInitTypeDef eraseInit = { /* configure your sector */ };
-    uint32_t pageError;
-
-    HAL_FLASH_Unlock();
-    HAL_FLASHEx_Erase(&eraseInit, &pageError);
-
-    uint64_t *src = (uint64_t *)parList;
-    uint32_t addr = FLASH_USER_START_ADDR;
-    for (size_t i = 0; i < sizeof(ds_parameters_t) / 8; i++, addr += 8)
-    {
-        HAL_FLASH_Program(FLASH_TYPEPROGRAM_DOUBLEWORD, addr, src[i]);
-    }
-
-    HAL_FLASH_Lock();
-}
-
-void dsReadParametersFromFlash(ds_parameters_t *parList)
-{
-    memcpy(parList, (void *)FLASH_USER_START_ADDR, sizeof(ds_parameters_t));
-}
-```
-
-### FreeRTOS+TCP Requirement
-
-The STM32 platform uses FreeRTOS+TCP. Ensure it is enabled and configured in your project (via STM32CubeMX or manually). The library expects `FreeRTOS_IP.h` and `FreeRTOS_Sockets.h` to be in your include path.
-
----
-
-## Testing Your Setup
-
-### Prerequisites
-
-- Python 3.6 or later
-- Network access to your device (or use the mock server for offline testing)
-
-### Option A: Test Without Hardware (Mock Server)
-
-```bash
-cd tools
-python3 mock_esp32_discovery.py
-```
-
-Expected output:
-```
-Mock ESP32 Discovery Server
-Listening on 0.0.0.0:2011
-Board: MockESP32-Test, Type: 1, Serial: 0x12345678
-------------------------------------------------------------
-Waiting for discovery requests... Press Ctrl+C to stop
-```
-
-### Option B: Test With Hardware
-
-```bash
-cd tools
-python3 test_udp_receive.py
-```
-
-Then send a discovery broadcast. You should see:
-```
-Received 44 bytes from 192.168.1.50:2011
-Data: efbeadde020100...
-```
-
-### Option C: Quick Discovery Test
-
-```python
-import socket, struct
-
-sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-sock.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
-sock.settimeout(2.0)
-
-request = struct.pack('<I B 3s', 0xDEADBEEF, 0x01, b'\x00\x00\x00')
-sock.sendto(request, ('<broadcast>', 2011))
-
-try:
-    data, addr = sock.recvfrom(1024)
-    print(f"Found device at {addr[0]}")
-except socket.timeout:
-    print("No devices found")
-finally:
-    sock.close()
-```
-
-### Verifying TCP Communication
-
-```python
-import socket, struct
-
-sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-sock.connect(('192.168.1.50', 2009))  # replace with your device IP
-
-# READ_PARAMETER (type=3), address 0
-packet = struct.pack('<BB I', 3, 0, 0)
-sock.send(packet)
-
-response = sock.recv(6)
-status, addr, value = struct.unpack('<bB I', response)
-print(f"Parameter 0 = {value}  (status: {status})")
-
-sock.close()
-```
-
-### Common Test Issues
-
-| Symptom | Cause | Solution |
-|---------|-------|----------|
-| No response to discovery | UDP port blocked | Check firewall, ensure port 2011 is open |
-| TCP connection refused | TCP task not running | Verify `dsTCPTaskCreate()` was called |
-| Mock server not receiving | Broadcast not reaching | Check network configuration |
-| Timeout on receive | Device not on network | Verify device IP, check with ping |
-
----
-
-## Overview
-
-The datastream library 2.0 introduces an external configuration system that allows you to:
-
-- **Use the library without modifying any library files** — all customisation via external headers
-- **Define application-specific registers and parameters** — custom data structures for your needs
-- **Maintain clean separation** — library code remains pristine and upgradeable
-- **Access system state via system registers** — stats, control interface, and counters managed by the library
-- **Automatic platform detection** — smart defaults based on your target platform
-- **Runtime task registration** — dynamic control interface management
-
----
-
-## What's New in Version 2.0
-
-### Major Changes
-1. **External Configuration System** — new `ds_app_config.h` auto-detection
-2. **Separate System Registers** — library-owned registers (`SYS_REGS`) accessed via `READ_SYSTEM_REGISTER` / `WRITE_SYSTEM_REGISTER`; user register structs no longer include them
-3. **System Commands at High Values** — built-in commands at 200+, user commands start from 0 with no offset needed
-4. **Modular Network Interfaces** — separated TCP (`dsTCP.h/c`) and UDP (`dsUDP.h/c`)
-5. **Task Registration System** — runtime control interface management
-6. **Platform Abstraction** — centralised platform definitions (`ds_platforms.h`)
-7. **Bug Fixes** — NULL pointer safety, initialisation fixes, style standardisation
-8. **Enhanced ESP32 Support** — full IP/MAC address retrieval
-9. **Comprehensive Documentation** — complete Doxygen API documentation with examples
-
----
-
-## Configuration Methods
-
-### Method 1: Automatic Configuration (Recommended)
-
-Create `ds_app_config.h` in your project's include path. The library detects it automatically via `__has_include`:
-
-```c
-// ds_app_config.h
-#ifndef DS_APP_CONFIG_H_
-#define DS_APP_CONFIG_H_
-
-#define DS_PLATFORM ESP32
-
-// Optional: custom register and parameter definitions
-#define DS_USER_REGISTER_DEFINITIONS  "config/my_registers.h"
-#define DS_USER_PARAMETER_DEFINITIONS "config/my_parameters.h"
-
-// Optional: board identification
-#define DS_BOARD_TYPE 1
-#define DS_BOARD_NAME "My Custom Board"
-#define DS_BOARD_ID   0x12345678
-
-// Optional: network configuration
-#define DS_TCP_PORT 2009
-#define DS_UDP_PORT 2011
-
-// Optional: feature flags
-#define DS_AUTO_DETECTION_ENABLE 1
-#define DS_STATS_ENABLE 1
-#define CRC8_ENABLE 0
-
-#endif
-```
-
-### Method 2: Build System Configuration
+## Configuring the Library
+
+All configuration flows through `ds_app_config.h`. Every macro has a default; set only what you need.
+
+### Core identity and protocol
+
+| Macro | Default | Purpose |
+|---|---|---|
+| `DS_PLATFORM` | `STM32` | `ESP32`, `STM32`, `RP2040`, `RP2350`, `GENERIC_PLATFORM` |
+| `DS_BOARD_NAME` | `"Datastream test"` | Reported in discovery (max 16 chars) |
+| `DS_BOARD_TYPE` | `1` | Application-defined category |
+| `DS_BOARD_ID` | `99` | Unique per device |
+| `DS_FIRMWARE_VERSION` | `0x0200` | Reported in discovery |
+| `CRC8_ENABLE` | `0` | Append 1-byte CRC to every packet |
+| `DS_STATS_ENABLE` | `1` | Maintain `DS_PACKET_COUNT` and `DS_ERROR_COUNT` |
+| `DS_AUTO_DETECTION_ENABLE` | `1` | UDP broadcast discovery support |
+| `DS_CLI_ENABLE` | `0` | Optional text CLI over TCP |
+
+### Network and tasks
+
+| Macro | Default |
+|---|---|
+| `DS_TCP_PORT` / `DS_UDP_PORT` | `2009` / `2011` |
+| `DS_TCP_TASK_PRIORITY` / `DS_UDP_TASK_PRIORITY` | `tskIDLE_PRIORITY + 6` |
+| `DS_TCP_TASK_STACK_SIZE` / `DS_UDP_TASK_STACK_SIZE` | `2 * configMINIMAL_STACK_SIZE` |
+| `DS_MAX_REGISTERED_TASKS` | `8` |
+
+### Custom definition files
+
+| Macro | Purpose |
+|---|---|
+| `DS_USER_REGISTER_DEFINITIONS` | Path to your register struct header |
+| `DS_USER_PARAMETER_DEFINITIONS` | Path to your parameter struct header |
+| `DS_USER_TYPES_DEFINITIONS` | Path to your shared enums/typedefs |
+
+### Alternative configuration methods
+
+If you prefer flags over a header:
 
 ```cmake
-# CMake
 target_compile_definitions(your_target PRIVATE
     DS_PLATFORM=ESP32
-    DS_USER_REGISTER_DEFINITIONS="config/my_registers.h"
-    DS_USER_PARAMETER_DEFINITIONS="config/my_parameters.h"
+    DS_USER_REGISTER_DEFINITIONS="my_registers.h"
     DS_BOARD_NAME="My Board"
 )
 ```
 
 ```makefile
-# Makefile
 CFLAGS += -DDS_PLATFORM=ESP32
-CFLAGS += -DDS_USER_REGISTER_DEFINITIONS=\"config/my_registers.h\"
-CFLAGS += -DDS_BOARD_NAME=\"My\ Board\"
+CFLAGS += -DDS_USER_REGISTER_DEFINITIONS=\"my_registers.h\"
 ```
 
-### Method 3: Direct Include (Legacy)
+### Toggling auto-detection of `ds_app_config.h`
 
-```c
-#define DS_PLATFORM STM32
-#define DS_USER_REGISTER_DEFINITIONS "my_registers.h"
-#include "datastream.h"
-```
+| Macro | Effect |
+|---|---|
+| `DS_USE_APP_CONFIG` | Force-include (for compilers without `__has_include`) |
+| `DS_NO_APP_CONFIG` | Skip include — rely only on build-system defines |
+| `DS_SHOW_CONFIG_INFO` | Print a compile-time message saying whether the file was found |
+| `DS_SUPPRESS_DEFAULT_WARNINGS` | Silence the "using defaults" informational pragmas |
 
 ---
 
-## Defining Your Registers
+## Defining Registers
 
-### What Are User Registers?
+**Registers** are the runtime face of your device — sensor readings, status flags, outputs. They live in RAM and are accessed via `READ_REGISTER` / `WRITE_REGISTER` packets.
 
-User registers hold your application's real-time data: sensor readings, status flags, control outputs. They are accessed by the client via `READ_REGISTER` / `WRITE_REGISTER` packet types (types 1 and 2).
+> System registers (packet counts, control interface, 1 Hz counter) are separate; see [System Registers](#system-registers). Do not include them in your user register struct.
 
-System registers (packet counts, control interface type, 1 Hz counter) are managed by the library in a separate `SYS_REGS` struct and are **not part of the user register struct**. They are accessed via `READ_SYSTEM_REGISTER` / `WRITE_SYSTEM_REGISTER` (types 6 and 7).
-
-### Register Definition Template (`my_registers.h`)
+### Template — `my_registers.h`
 
 ```c
 #ifndef MY_REGISTERS_H_
@@ -538,54 +292,53 @@ System registers (packet counts, control interface type, 1 Hz counter) are manag
 
 typedef struct PACKED
 {
-    /***** read-only registers (must come first) *****/
-    uint32_t    STATUS_FLAGS;
-    float       SENSOR_READING;
-    uint32_t    SYSTEM_UPTIME;
+    /* ---- read-only (must come first) ---- */
+    uint32_t STATUS_FLAGS;
+    float    SENSOR_READING;
+    uint32_t SYSTEM_UPTIME;
 
-    /***** read/write registers *****/
-    uint32_t    CONTROL_MODE;
-    uint32_t    OUTPUT_ENABLE;
-    float       SETPOINT;
+    /* ---- read/write ---- */
+    uint32_t CONTROL_MODE;
+    uint32_t OUTPUT_ENABLE;
+    float    SETPOINT;
 
 } ds_register_names_t;
 
-DS_STATIC_ASSERT(sizeof(ds_register_names_t) % 4 == 0, "Register struct must be 4-byte aligned");
+DS_STATIC_ASSERT(sizeof(ds_register_names_t) % 4 == 0,
+                 "Register struct must be 4-byte aligned");
 
-#define DS_REGISTERS_BY_NAME_T_SIZE     sizeof(ds_register_names_t)
-#define DS_REGISTER_COUNT               (DS_REGISTERS_BY_NAME_T_SIZE / sizeof(uint32_t))
-#define DS_REGISTERS_READ_ONLY_COUNT    3   // adjust to match read-only fields above
+#define DS_REGISTERS_BY_NAME_T_SIZE   sizeof(ds_register_names_t)
+#define DS_REGISTER_COUNT             (DS_REGISTERS_BY_NAME_T_SIZE / sizeof(uint32_t))
+#define DS_REGISTERS_READ_ONLY_COUNT  3    /* number of read-only fields above */
 
 #endif
 ```
 
-### Register Requirements
+### Rules
 
-1. **All fields must be 32-bit**: use `uint32_t`, `int32_t`, `float`, or a custom 32-bit enum
-2. **Read-only registers must come first** in the struct; set `DS_REGISTERS_READ_ONLY_COUNT` accordingly
-3. **Do not include system registers** — they are in `SYS_REGS`, not here
-4. **At least one field is required** to avoid a zero-size struct (the minimal placeholder file satisfies this)
+- **Every field is 32-bit** (`uint32_t`, `int32_t`, `float`, or a 32-bit-sized enum/typedef).
+- **Read-only fields come first**, and `DS_REGISTERS_READ_ONLY_COUNT` must match.
+- **Arrays count as multiple registers** — `uint32_t x[4]` occupies four addresses.
+- **At least one field is required** to avoid a zero-size struct.
 
-### Accessing Registers from Your Application
+### Accessing from your code
 
 ```c
-// Write from your application (directly, no permission check needed)
 REGS.byName.STATUS_FLAGS = 0x01;
-REGS.byName.SENSOR_READING = 3.14f;
+REGS.byName.SENSOR_READING = read_temp();
 
-// Read from your application
 uint32_t mode = REGS.byName.CONTROL_MODE;
 ```
 
+Direct access skips permission checks — use the packet API (or `dsSetRegister()`) only when you want the same gating a network client would see.
+
 ---
 
-## Defining Your Parameters
+## Defining Parameters
 
-### What Are Parameters?
+**Parameters** are configuration values that must survive reboots — calibration offsets, network settings, operating mode. Access from the wire uses `READ_PARAMETER` / `WRITE_PARAMETER`. Persistence is your responsibility (see [Flash Persistence](#flash-persistence)).
 
-Parameters are persistent configuration values stored in flash memory. They survive power cycles. They are accessed by the client via `READ_PARAMETER` / `WRITE_PARAMETER` (types 3 and 4).
-
-### Parameter Definition Template (`my_parameters.h`)
+### Template — `my_parameters.h`
 
 ```c
 #ifndef MY_PARAMETERS_H_
@@ -595,29 +348,30 @@ Parameters are persistent configuration values stored in flash memory. They surv
 
 typedef struct PACKED
 {
-    // Device identification
+    /* Identity */
     uint32_t DEVICE_ID;
 
-    // Network configuration
+    /* Network */
     uint32_t USES_DHCP;
     uint32_t IP_ADDR[4];
     uint32_t GATEWAY_ADDR[4];
     uint32_t NET_MASK[4];
     uint32_t MAC_ADDR[6];
 
-    // Application parameters
+    /* Application */
     float    CALIBRATION_OFFSET;
     float    CALIBRATION_SCALE;
     uint32_t OPERATING_MODE;
     uint32_t ALARM_THRESHOLD;
 
-    // Optional: bookkeeping fields useful in your flash read/write implementation
+    /* Optional bookkeeping — useful in your flash driver */
     uint32_t PARAMETERS_SETS_IN_FLASH;
     uint32_t PARAMETERS_INITIALIZATION_MARKER;
 
 } ds_parameter_names_t;
 
-DS_STATIC_ASSERT(sizeof(ds_parameter_names_t) % 4 == 0, "Parameter struct must be 4-byte aligned");
+DS_STATIC_ASSERT(sizeof(ds_parameter_names_t) % 4 == 0,
+                 "Parameter struct must be 4-byte aligned");
 
 #define DS_PARAMETERS_T_SIZE   sizeof(ds_parameter_names_t)
 #define DS_PARAMETER_COUNT     (DS_PARAMETERS_T_SIZE / sizeof(uint32_t))
@@ -625,308 +379,393 @@ DS_STATIC_ASSERT(sizeof(ds_parameter_names_t) % 4 == 0, "Parameter struct must b
 #endif
 ```
 
-### Parameter Requirements
+### Rules
 
-1. **All fields must be 32-bit aligned**
-2. **Parameters are stored in flash** — the library calls `dsWriteParametersToFlash()` / `dsReadParametersFromFlash()` which you must implement (see [Implementing Flash Storage](#implementing-flash-storage))
-3. `PARAMETERS_SETS_IN_FLASH` and `PARAMETERS_INITIALIZATION_MARKER` are optional but recommended for managing flash version control in your own flash implementation
+- All fields are 32-bit aligned (same rules as registers).
+- Parameters are loaded once at boot via `dsReadParametersFromFlash()` and saved on `WRITE_FLASH`.
+- Defaults can be supplied by overriding `dsSetParametersDefaults()`.
+
+### Accessing from your code
+
+```c
+float cal = PARS.byName.CALIBRATION_OFFSET;
+PARS.byName.OPERATING_MODE = MODE_ACTIVE;
+```
 
 ---
 
 ## System Registers
 
-System registers are library-owned and stored in `SYS_REGS`. They are separate from user registers and are accessed via packet types 6 and 7.
+System registers are owned by the library (struct `SYS_REGS`, accessed via packet types `READ_SYSTEM_REGISTER` / `WRITE_SYSTEM_REGISTER`). They are always present and their layout is fixed.
 
-| Register | Type | Access | Description |
-|----------|------|--------|-------------|
-| `DS_PACKET_COUNT` | `uint32_t` | Read-only | Total packets received (if `DS_STATS_ENABLE`) |
-| `DS_ERROR_COUNT` | `uint32_t` | Read-only | Total errors (if `DS_STATS_ENABLE`) |
-| `CONTROL_INTERFACE` | `uint32_t` | Read-only | Current control interface type |
-| `COUNTER_1HZ` | `uint32_t` | Read/write | 1 Hz counter, updated by your application |
-
-### Accessing System Registers from Application Code
+| Register | Access | Meaning |
+|---|---|---|
+| `DS_PACKET_COUNT` | read-only | Packets received (only if `DS_STATS_ENABLE`) |
+| `DS_ERROR_COUNT` | read-only | Errors recorded (only if `DS_STATS_ENABLE`) |
+| `CONTROL_INTERFACE` | read-only | `ds_control_interface_t` of the current writer |
+| `COUNTER_1HZ` | read / write | Free 1 Hz counter — incremented by your app |
 
 ```c
-// Update the 1 Hz counter from your timer task
-SYS_REGS.byName.COUNTER_1HZ++;
-
-// Read stats
-uint32_t total_packets = SYS_REGS.byName.DS_PACKET_COUNT;
+SYS_REGS.byName.COUNTER_1HZ++;                   // tick from your timer task
+uint32_t pkts = SYS_REGS.byName.DS_PACKET_COUNT;
 ```
 
-### Customising System Register Initialisation
-
-Override the weak function if you need custom initial values:
+Override the weak initialiser if you need custom starting values:
 
 ```c
-void dsInitializeSystemRegisters(ds_system_registers_t *sysRegList)
+void dsInitializeSystemRegisters(ds_system_registers_t *sysRegs)
 {
-    sysRegList->byName.COUNTER_1HZ = 0;
-    // DS_PACKET_COUNT and DS_ERROR_COUNT are zeroed automatically
+    sysRegs->byName.COUNTER_1HZ = 0;
+    /* DS_PACKET_COUNT / DS_ERROR_COUNT are already zeroed */
 }
 ```
 
 ---
 
-## Task Registration System
+## Flash Persistence
 
-Version 2.0 introduces a runtime task registration system for control interface management. Only registered tasks can be granted exclusive write access.
-
-### Why Task Registration?
-
-- **Dynamic**: register tasks at runtime instead of compile-time configuration
-- **Flexible**: multiple tasks can participate in the control interface
-- **Debuggable**: task names help identify which task holds control
-- **Safe**: automatic validation and permission checking
-
-### How to Use
-
-Network tasks (`dsTCP`, `dsUDP`) register themselves automatically. If your application task also needs write access, register it manually:
+The library provides **weak** hooks for parameter storage — if you don't override them, parameters are lost at power-off.
 
 ```c
-void app_main(void)
-{
-    dsInitialize();
+/* Called on WRITE_FLASH and when defaults are applied */
+void dsWriteParametersToFlash(ds_parameters_t *pars);
 
-    TaskHandle_t myTask = xTaskGetCurrentTaskHandle();
-    bool ok = dsRegisterControlTask(myTask, ds_control_TCP_DATASTREAM, "AppTask");
-
-    dsTCPTaskCreate();
-    dsUDPTaskCreate();
-}
+/* Called during dsInitialize() */
+void dsReadParametersFromFlash(ds_parameters_t *pars);
 ```
 
-### Custom Permission Check (Optional)
-
-```c
-// Override this weak function to customise who can write
-bool dsCheckTaskWritePermission(void)
-{
-    TaskHandle_t current = xTaskGetCurrentTaskHandle();
-    ds_control_interface_t type = dsGetTaskControlType(current);
-    return (type == ds_control_TCP_DATASTREAM || type == ds_control_USB);
-}
-```
-
-### Maximum Registered Tasks
-
-Configure via `ds_app_config.h`:
-```c
-#define DS_MAX_REGISTERED_TASKS 8
-```
-
----
-
-## Implementing Flash Storage
-
-The library provides two weak functions you **must** override for parameter persistence. Without overriding them, parameters are lost on power cycle.
-
-```c
-// Called by WRITE_FLASH system command and dsInitialize() → dsSetParametersDefaults()
-void dsWriteParametersToFlash(ds_parameters_t *parList);
-
-// Called during dsInitialize() to load parameters from flash
-void dsReadParametersFromFlash(ds_parameters_t *parList);
-```
-
-Similarly, override the board name flash functions if you use `dsSetBoardName()` with persistence:
+Same pattern for the board name, if you want `dsSetBoardName()` to persist:
 
 ```c
 void dsWriteBoardNameToFlash(const char *name);
 void dsReadBoardNameFromFlash(char *name, size_t maxLen);
 ```
 
+### ESP32 (NVS)
+
+```c
+#include "nvs_flash.h"
+#include "nvs.h"
+#include "dsParameters.h"
+
+void dsWriteParametersToFlash(ds_parameters_t *pars)
+{
+    nvs_handle_t h;
+    if (nvs_open("datastream", NVS_READWRITE, &h) != ESP_OK) return;
+    nvs_set_blob(h, "params", pars, sizeof(*pars));
+    nvs_commit(h);
+    nvs_close(h);
+}
+
+void dsReadParametersFromFlash(ds_parameters_t *pars)
+{
+    nvs_handle_t h;
+    size_t size = sizeof(*pars);
+    if (nvs_open("datastream", NVS_READONLY, &h) != ESP_OK) return;
+    nvs_get_blob(h, "params", pars, &size);
+    nvs_close(h);
+}
+```
+
+### STM32 (internal flash sector)
+
+```c
+#define FLASH_USER_START_ADDR  0x080E0000U   /* example — pick a reserved sector */
+
+void dsWriteParametersToFlash(ds_parameters_t *pars)
+{
+    FLASH_EraseInitTypeDef erase = { /* configure for your sector */ };
+    uint32_t err = 0;
+
+    HAL_FLASH_Unlock();
+    HAL_FLASHEx_Erase(&erase, &err);
+
+    const uint64_t *src = (const uint64_t *)pars;
+    uint32_t addr = FLASH_USER_START_ADDR;
+    for (size_t i = 0; i < sizeof(*pars) / 8; ++i, addr += 8) {
+        HAL_FLASH_Program(FLASH_TYPEPROGRAM_DOUBLEWORD, addr, src[i]);
+    }
+    HAL_FLASH_Lock();
+}
+
+void dsReadParametersFromFlash(ds_parameters_t *pars)
+{
+    memcpy(pars, (void *)FLASH_USER_START_ADDR, sizeof(*pars));
+}
+```
+
+### RP2040 / RP2350
+
+Use `pico/flash.h` (`flash_range_erase` + `flash_range_program`) from a core that isn't running XIP-sensitive code, or write through a filesystem such as LittleFS.
+
 ---
 
-## Implementing Custom System Commands
+## Custom System Commands
 
-Built-in system commands occupy values 200–202. Values 0–199 are available for user-defined commands. Simply define a normal C enum (starting from 0 is safe — no offset needed):
+The library reserves system command values **65000–65535**. Everything below is yours.
 
 ```c
 typedef enum {
-    cmd_START    = 0,
-    cmd_STOP     = 1,
-    cmd_TRIGGER  = 2,
+    cmd_START     = 0,
+    cmd_STOP      = 1,
+    cmd_TRIGGER   = 2,
     cmd_CALIBRATE = 3,
 } my_sys_commands_t;
-```
 
-Handle them by implementing the weak function:
-
-```c
-bool dsProcessUserSysCommand(const dsRxPacket *inputPacket, dsTxPacket *outputPacket)
+bool dsProcessUserSysCommand(const dsRxPacket *in, dsTxPacket *out)
 {
-    switch (inputPacket->contents.value)
-    {
+    switch (in->contents.value) {
         case cmd_START:
             start_system();
-            outputPacket->contents.status = SYS_COMMAND_OK_REPLY_VAL;
+            out->contents.status = SYS_COMMAND_OK_REPLY_VAL;
             return true;
 
-        case cmd_STOP:
-            stop_system();
-            outputPacket->contents.status = SYS_COMMAND_OK_REPLY_VAL;
+        case cmd_CALIBRATE:
+            if (!calibrate()) return false;      /* library returns error */
+            out->contents.status = SYS_COMMAND_OK_REPLY_VAL;
             return true;
 
         default:
-            return false;  // unknown command → library returns error
+            return false;                         /* unknown → library returns error */
     }
 }
 ```
 
+Return `true` when you've handled the command (and set the reply status), `false` to let the library reply with a system-command error.
+
 ---
 
-## Defining Your Types
+## Control Interface & Task Registration
 
-If you need application-specific enums in your register or parameter structs, define them in a separate file:
+Datastream enforces single-writer semantics: a task must first be registered as a control interface before its writes are accepted. TCP and UDP tasks register themselves at startup — you usually don't have to think about this.
+
+### When to register manually
+
+If an application task of yours needs write access (a CLI, USB handler, local state machine, etc.):
 
 ```c
-#ifndef MY_TYPES_H_
-#define MY_TYPES_H_
+TaskHandle_t t = xTaskGetCurrentTaskHandle();
+dsRegisterControlTask(t, ds_control_TCP_DATASTREAM, "AppTask");
+```
 
-#include <stdint.h>
+Built-in interface types:
 
+| Type | Value |
+|---|:---:|
+| `ds_control_UNDECIDED` | 0 |
+| `ds_control_TCP_DATASTREAM` | 1 |
+| `ds_control_UDP_DATASTREAM` | 2 |
+| `ds_control_TCP_CLI` | 101 |
+| `ds_control_USB` | 102 |
+| `ds_control_USER_DEFINED_START` | 100 |
+
+Define your own:
+```c
+#define MY_INTERFACE (ds_control_USER_DEFINED_START + 10)
+```
+
+### Custom permission check
+
+Override the weak predicate to gate writes however you like:
+
+```c
+bool dsCheckTaskWritePermission(void)
+{
+    TaskHandle_t t = xTaskGetCurrentTaskHandle();
+    ds_control_interface_t type = dsGetTaskControlType(t);
+    return (type == ds_control_TCP_DATASTREAM || type == ds_control_USB);
+}
+```
+
+Increase the registration limit via `DS_MAX_REGISTERED_TASKS` (default `8`).
+
+---
+
+## Custom Types and Callbacks
+
+### Shared types
+
+If your register or parameter structs use enums, put them in a separate header and point `ds_app_config.h` at it:
+
+```c
+/* my_types.h */
 typedef enum {
     MODE_STANDBY = 0,
     MODE_ACTIVE  = 1,
-    MODE_ERROR   = 2
+    MODE_ERROR   = 2,
 } operating_mode_t;
 
-DS_STATIC_ASSERT(sizeof(operating_mode_t) == sizeof(uint32_t), "operating_mode_t must be 32-bit");
-
-#endif
+DS_STATIC_ASSERT(sizeof(operating_mode_t) == sizeof(uint32_t),
+                 "operating_mode_t must be 32-bit");
 ```
 
-Point to it from `ds_app_config.h`:
 ```c
+/* ds_app_config.h */
 #define DS_USER_TYPES_DEFINITIONS "my_types.h"
+```
+
+### React to reads and writes
+
+```c
+void dsRegisterSetCallback(uint16_t addr, uint32_t oldVal, uint32_t newVal);
+void dsRegisterGetCallback(uint16_t addr, uint32_t val);
+void dsParameterSetCallback(uint16_t addr, uint32_t oldVal, uint32_t newVal);
+void dsParameterGetCallback(uint16_t addr, uint32_t val);
+```
+
+Useful for triggering side effects (e.g. reconfigure a PWM when `SETPOINT` changes).
+
+### Packet-level hooks
+
+```c
+bool dsProcessUserDefinedType(dsRxPacket *in, dsTxPacket *out, reply_t *reply);
+void dsErrorCallback(reply_t reply, dsRxPacket *in, dsTxPacket *out);
+```
+
+Use `dsProcessUserDefinedType` to implement packet types at or above `USER_DEFINED_START` (100+).
+
+### Logging
+
+**ESP32** — set `ESP32_LOGGING_ENABLE 1` in `ds_app_config.h`; `DS_LOGI` / `DS_LOGE` route through `esp_log`.
+
+**Other platforms** — define the macros yourself:
+```c
+#define DS_LOGI(fmt, ...) printf("[INFO] "  fmt "\n", ##__VA_ARGS__)
+#define DS_LOGE(fmt, ...) printf("[ERROR] " fmt "\n", ##__VA_ARGS__)
 ```
 
 ---
 
-## Compiler Warnings
+## Testing Your Setup
 
-### Default Definition Warnings
+Everything below works against either real hardware or the mock server in `tools/`.
 
-When no custom definitions are configured, you may see:
+### With no hardware — mock server
+
+```bash
+python3 tools/mock_esp32_discovery.py
 ```
-DATASTREAM: Using default register definitions. Define DS_USER_REGISTER_DEFINITIONS to use custom registers.
-DATASTREAM: Using default parameter definitions. Define DS_USER_PARAMETER_DEFINITIONS to use custom parameters.
+```
+Mock ESP32 Discovery Server
+Listening on 0.0.0.0:2011
+Board: MockESP32-Test, Type: 1, Serial: 0x12345678
+Waiting for discovery requests…
 ```
 
-### Suppressing Warnings
+### Passive UDP listener
 
-If you intentionally use the minimal defaults, suppress with:
-```c
-#define DS_SUPPRESS_DEFAULT_WARNINGS
+```bash
+python3 tools/test_udp_receive.py
 ```
+
+### Discovery one-liner
+
+```python
+import socket, struct
+
+sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+sock.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
+sock.settimeout(2.0)
+
+sock.sendto(struct.pack('<I B 3s', 0xDEADBEEF, 0x01, b'\x00\x00\x00'),
+            ('<broadcast>', 2011))
+
+try:
+    data, addr = sock.recvfrom(1024)
+    print(f"Found device at {addr[0]}")
+except socket.timeout:
+    print("No devices found")
+```
+
+### TCP round-trip (read a parameter)
+
+Remember the packet layout changed in v0.2.2: **type and address are now 16-bit.**
+
+```python
+import socket, struct
+
+sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+sock.connect(('192.168.1.50', 2009))
+
+# Request: type(u16) + addr(u16) + value(u32). type 3 = READ_PARAMETER
+sock.send(struct.pack('<HHI', 3, 0, 0))
+
+# Response: status(i16) + addr(u16) + value(u32)
+status, addr, value = struct.unpack('<hHI', sock.recv(8))
+print(f"Parameter 0 = {value}   (status: {status})")
+```
+
+### Symptom checklist
+
+| Symptom | Likely cause | Fix |
+|---|---|---|
+| No discovery response | UDP blocked / wrong port | Check firewall, confirm `DS_UDP_PORT` |
+| TCP connection refused | Task never started | Verify `dsTCPTaskCreate()` ran after `dsInitialize()` |
+| Client receives garbage | Protocol mismatch | Use `<HHI` packing (16-bit type/addr) — not `<BB I` |
+| Writes return `-5` (permission) | No control interface claimed | Send a `CONTROL_INTERFACE` packet first, or register your task |
+| Parameters lost on reboot | Flash hooks not overridden | Implement `dsWriteParametersToFlash()` / `dsReadParametersFromFlash()` |
 
 ---
 
 ## Troubleshooting
 
-### Common Issues
+### Compiler can't find custom headers
+- Confirm the path in `DS_USER_REGISTER_DEFINITIONS` / `DS_USER_PARAMETER_DEFINITIONS` is resolvable from the build's include roots.
+- Double-check that the file is actually added to the build (common issue in CubeIDE).
 
-1. **Compiler can't find custom headers**
-   - Verify file paths in `DS_USER_REGISTER_DEFINITIONS` / `DS_USER_PARAMETER_DEFINITIONS` match actual file locations relative to the build include path
-   - Check that the directory is in your build system's include paths
+### Static assertion failures
+- Every register/parameter field must be 32-bit — no `uint16_t`, no `bool`, no unpadded structs.
+- Check `DS_REGISTERS_READ_ONLY_COUNT` matches the number of read-only fields.
 
-2. **Structure size assertion failure**
-   - Ensure all register/parameter members are 32-bit (`uint32_t`, `int32_t`, `float`)
-   - Use `DS_STATIC_ASSERT` to catch misalignment at compile time
+### Linker errors
+- Ensure all required `.c` files are listed — in ESP-IDF, check the component's `SRCS` list.
+- If `DS_CLI_ENABLE` is set, add `src/dsCLI.c`.
 
-3. **Linking errors**
-   - Verify all required `.c` files are included in the build
-   - Check that `DS_REGISTER_COUNT` and `DS_PARAMETER_COUNT` are correctly defined
-
-4. **Compiler warnings about default definitions**
-   - Define `DS_SUPPRESS_DEFAULT_WARNINGS` to suppress, or provide custom definition files
-
-5. **STM32CubeIDE: false `uint32_t is not a type name` errors in headers**
-   - These are IntelliSense/indexer artefacts, not real compiler errors — the build will succeed
-
-### Configuration Detection
-
-**Verify ds_app_config.h is Being Used:**
+### Verifying configuration at compile time
+Add to `ds_app_config.h`:
 ```c
-// Add to ds_app_config.h
 #define DS_SHOW_CONFIG_INFO
 ```
-
-You will see during compilation:
+You will see one of:
 ```
 DATASTREAM INFO: ds_app_config.h detected and included
-```
-or:
-```
 DATASTREAM INFO: ds_app_config.h not found, using defaults
 ```
 
-**Force or Exclude ds_app_config.h:**
-```c
-#define DS_USE_APP_CONFIG   // force include (for compilers without __has_include)
-#define DS_NO_APP_CONFIG    // exclude (use only build-system defines)
+### Default-definition warnings
 ```
+DATASTREAM: Using default register definitions. Define DS_USER_REGISTER_DEFINITIONS …
+```
+Either provide your own headers or add `#define DS_SUPPRESS_DEFAULT_WARNINGS`.
 
-### New Issues in Version 2.0
+### Include-order issues
+Always include `datastream.h` before `dsTCP.h` or `dsUDP.h`.
 
-1. **Control interface requests fail with permission error**
-   - Ensure the relevant task is registered via `dsRegisterControlTask()` before issuing a control command
-   - Network tasks register themselves automatically — this mainly applies to custom application tasks
+### STM32CubeIDE: phantom `uint32_t is not a type name`
+IntelliSense/indexer artefact — the real build succeeds. Regenerate the index (Project → C/C++ Index → Rebuild) if it bothers you.
 
-2. **Header include order errors**
-   - Include `datastream.h` before `dsTCP.h` or `dsUDP.h`
-
-3. **Auto-detection not responding**
-   - Ensure `DS_AUTO_DETECTION_ENABLE 1` is set
-   - Verify `dsUDPTaskCreate()` was called
-   - Confirm board identification is configured in `ds_app_config.h`
+### Auto-detection not answering
+- `DS_AUTO_DETECTION_ENABLE 1`
+- `dsUDPTaskCreate()` called
+- Board identity defined in `ds_app_config.h`
+- Client reaches the board's broadcast domain (routers drop broadcasts)
 
 ---
 
 ## Best Practices
 
-1. **Always initialize first**: call `dsInitialize()` before any other datastream function
-2. **Keep library clean**: never modify library files — use external configuration
-3. **Override flash functions**: persistence does not work without `dsWriteParametersToFlash()` / `dsReadParametersFromFlash()`
-4. **Version-control your config files**: `ds_app_config.h`, register definitions, and parameter definitions should all live in your project repository, not in the library
-5. **Use the examples as a starting point**: copy from `examples/` and customise — do not edit them in place
+1. **`dsInitialize()` first, always** — before creating TCP/UDP tasks or registering your own.
+2. **Never edit library files.** Every override lives in your project (`ds_app_config.h`, weak hooks, custom definition headers).
+3. **Override the flash hooks.** Parameters are meaningless without them.
+4. **Version-control your config.** `ds_app_config.h` and your register/parameter headers are *application* code — keep them in your repo, not vendored alongside the library.
+5. **Start from `examples/`.** Copy `ds_app_config_example.h`, `ds_app_register_names_example.h`, `ds_app_parameter_names_example.h` and adapt — don't edit the examples in place.
+6. **Use defaults when you can.** The library's sensible defaults keep `ds_app_config.h` short and your intent clear.
 
 ---
 
-## Support and Resources
+## Support
 
-### Helper Scripts
-
-| Script | Purpose |
-|--------|---------|
-| `tools/mock_esp32_discovery.py` | Simulates an ESP32 board responding to discovery requests |
-| `tools/test_udp_receive.py` | Listens for and displays incoming UDP packets |
-| `tools/test_discovery.py` | Discovery client for testing board discovery |
-
-```bash
-python3 tools/mock_esp32_discovery.py
-python3 tools/test_udp_receive.py
-```
-
-### Documentation
-
-- **API Reference**: generate with `doxygen Doxyfile`, then open `docs/html/index.html`
-- **README.md**: protocol overview, quick start, client examples, and memory reference
-- **USER_INTEGRATION_GUIDE.md**: this file — integration, platform setup, and migration
-
-### Logging
-
-**ESP32:**
-```c
-// Define in ds_app_config.h to enable
-#define ESP32_LOGGING_ENABLE 1
-// DS_LOGI / DS_LOGE are then routed to esp_log
-```
-
-**Other Platforms:**
-```c
-// Define custom logging macros in ds_app_config.h
-#define DS_LOGI(fmt, ...) printf("[INFO] " fmt "\n", ##__VA_ARGS__)
-#define DS_LOGE(fmt, ...) printf("[ERROR] " fmt "\n", ##__VA_ARGS__)
-```
+- **Protocol & API reference** — [README.md](README.md)
+- **Generated API docs** — `doxygen Doxyfile`, then open `docs/html/index.html`
+- **Helper scripts** — `tools/mock_esp32_discovery.py`, `tools/test_udp_receive.py`, `tools/test_discovery.py`
+- **Commercial licensing** — [COMMERCIAL.md](COMMERCIAL.md)
