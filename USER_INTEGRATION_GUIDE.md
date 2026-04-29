@@ -1,5 +1,7 @@
 # Datastream — User Integration Guide
 
+> **Status:** v0.2.4
+
 A full walkthrough for dropping the datastream library into an embedded project without modifying its source. For protocol details and API reference, see [README.md](README.md).
 
 ---

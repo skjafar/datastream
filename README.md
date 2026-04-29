@@ -4,7 +4,7 @@ A lightweight binary protocol for embedded systems. Read and write device state 
 
 > **Platforms:** ESP32 · STM32 · RP2040 · RP2350 · Generic
 > **Footprint:** ~4–9 KB flash, ~1 KB RAM
-> **Status:** v0.2.2
+> **Status:** v0.2.4
 
 ---
 
