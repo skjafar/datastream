@@ -24,7 +24,7 @@ By the end you will have an ESP32-S3 board that:
 
 | Tool | Version |
 |---|---|
-| ESP-IDF | 5.x — install via the [ESP-IDF Tools Installer](https://dl.espressif.com/dl/esp-idf/) or [EIM](https://github.com/espressif/idf-im-ui) |
+| ESP-IDF | 5.x or 6.x — install via the [ESP-IDF Tools Installer](https://dl.espressif.com/dl/esp-idf/) or [EIM](https://dl.espressif.com/dl/eim/) |
 | PowerShell | 5.1 (built into Windows 10/11) or PowerShell 7+ |
 | Python | 3.10+ — bundled by the ESP-IDF installer |
 | Git | bundled by the ESP-IDF installer, or [Git for Windows](https://git-scm.com/download/win) |
@@ -37,12 +37,20 @@ from the Start Menu. The window starts with `IDF_PATH` already exported.
 
 **Option B — source `export.ps1` in your own PowerShell:**
 
+> **First-time only (manual installs):** If you cloned ESP-IDF manually
+> (e.g. to `C:\esp\v6.0.1\esp-idf\`) instead of using the GUI installer,
+> you must run `install.ps1` once before `export.ps1` will work. The GUI
+> installer does this step for you automatically.
+> ```powershell
+> & "C:\esp\v6.0.1\esp-idf\install.ps1"   # creates the Python venv + downloads tools
+> ```
+
 ```powershell
-& "C:\Espressif\frameworks\esp-idf-vX.Y\export.ps1"
+& "C:\esp\v6.0.1\esp-idf\export.ps1"
 idf.py --version
 ```
 
-(Replace `X.Y` with your installed version, e.g. `v5.5.2`.)
+(Replace the path with your installed version, e.g. `C:\Espressif\frameworks\esp-idf-v5.5.2\`.)
 
 > **PowerShell refuses to run `export.ps1`?** Set the execution policy
 > for your user:

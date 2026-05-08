@@ -55,6 +55,6 @@ typedef struct PACKED
 
 // Number of read-only user registers (counted from the start of the struct above).
 // System registers are not counted here — they are managed by the library.
-#define DS_REGISTERS_READ_ONLY_COUNT    0
+#define DS_REGISTERS_READ_ONLY_COUNT    1
 
 #endif /* DS_REGISTER_NAMES_H_ */
